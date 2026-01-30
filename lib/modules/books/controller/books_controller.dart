@@ -1,13 +1,17 @@
 import 'package:get/get.dart';
 import '../../../models/book.dart';
+import '../../../models/question_paper.dart';
 import '../../../services/api_service.dart';
 import '../../../services/role_access_service.dart';
+import '../../../services/api/question_papers_api_service.dart';
 
 /// Books controller managing book inventory and operations
 /// Integrates with the centralized ApiService for all API operations
 class BooksController extends GetxController {
   final ApiService _apiService = Get.find<ApiService>();
   final RoleAccessService _roleAccessService = Get.find<RoleAccessService>();
+  final QuestionPapersApiService _questionPapersApiService = 
+      Get.find<QuestionPapersApiService>();
 
   // Observable variables for reactive UI updates
   final RxList<Book> _books = <Book>[].obs;
@@ -19,6 +23,9 @@ class BooksController extends GetxController {
   final RxInt _totalItems = 0.obs;
   final RxInt _totalPages = 0.obs;
   final RxBool _hasMore = false.obs;
+
+  // Question paper state management
+  final RxList<QuestionPaper> _questionPapers = <QuestionPaper>[].obs;
 
   // Getters for UI access
   List<Book> get books => _books.toList();
@@ -32,9 +39,166 @@ class BooksController extends GetxController {
   bool get hasMore => _hasMore.value;
   bool get hasBooks => _books.isNotEmpty;
   bool get hasError => _error.value.isNotEmpty;
+  
+  // Question paper getters
+  List<QuestionPaper> get questionPapers => _questionPapers.toList();
 
   // Configuration
   static const int itemsPerPage = 20;
+
+  /// Create question paper with PDF upload
+  /// Returns the created question paper if successful, null otherwise
+  Future<QuestionPaper?> createQuestionPaperWithPdf(
+    Map<String, dynamic> questionPaperData,
+    String? pdfFilePath, {
+    List<int>? pdfFileBytes,
+    String? pdfFileName,
+  }) async {
+    if (!_roleAccessService.canModify('question_papers')) {
+      _showAccessDeniedError('create question papers');
+      return null;
+    }
+
+    try {
+      _isLoading.value = true;
+      _error.value = '';
+
+      // Step 1: Create question paper
+      Get.log('Creating question paper: ${questionPaperData['title']}', 
+        isError: false);
+      
+      final questionPaper = await _questionPapersApiService
+          .createQuestionPaper(questionPaperData);
+
+      Get.log('Question paper created with ID: ${questionPaper.id}', 
+        isError: false);
+
+      // Step 2: Upload PDF if provided
+      if (pdfFileName != null && 
+          (pdfFilePath != null || pdfFileBytes != null)) {
+        try {
+          Get.log('Uploading PDF: $pdfFileName', isError: false);
+          
+          await _questionPapersApiService.uploadQuestionPaperPdf(
+            questionPaper.id,
+            pdfFilePath,
+            fileBytes: pdfFileBytes,
+            fileName: pdfFileName,
+          );
+
+          Get.log('PDF uploaded successfully', isError: false);
+        } catch (uploadError) {
+          // Handle partial failure: question paper created but PDF upload failed
+          Get.log('Error uploading PDF: $uploadError', isError: true);
+          
+          _showSnackbar(
+            'Partial Success',
+            'Question paper "${questionPaper.title}" created, but PDF upload failed: ${_handleError(uploadError)}',
+            isError: true,
+          );
+          
+          // Still add to local list even if upload failed
+          _questionPapers.add(questionPaper);
+          return questionPaper;
+        }
+      }
+
+      // Add to local list
+      _questionPapers.add(questionPaper);
+
+      _showSnackbar(
+        'Success',
+        'Question paper "${questionPaper.title}" created successfully',
+        isError: false,
+      );
+
+      return questionPaper;
+    } catch (e) {
+      _error.value = _handleError(e);
+      Get.log('Error creating question paper: $e', isError: true);
+      
+      _showSnackbar(
+        'Error',
+        'Failed to create question paper: ${_error.value}',
+        isError: true,
+      );
+      
+      return null;
+    } finally {
+      _isLoading.value = false;
+    }
+  }
+
+  /// Delete a question paper
+  Future<bool> deleteQuestionPaper(String questionPaperId) async {
+    if (!_roleAccessService.canModify('question_papers')) {
+      _showAccessDeniedError('delete question papers');
+      return false;
+    }
+
+    try {
+      _isLoading.value = true;
+      _error.value = '';
+
+      final success = await _questionPapersApiService
+          .deleteQuestionPaper(questionPaperId);
+
+      if (success) {
+        // Remove from local list
+        _questionPapers.removeWhere((qp) => qp.id == questionPaperId);
+
+        _showSnackbar(
+          'Success',
+          'Question paper deleted successfully',
+          isError: false,
+        );
+
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      _error.value = _handleError(e);
+      Get.log('Error deleting question paper: $e', isError: true);
+      
+      _showSnackbar(
+        'Error',
+        'Failed to delete question paper: ${_error.value}',
+        isError: true,
+      );
+      
+      return false;
+    } finally {
+      _isLoading.value = false;
+    }
+  }
+
+  /// Clear question papers list
+  void clearQuestionPapers() {
+    _questionPapers.clear();
+  }
+
+  /// Show snackbar message (can be overridden for testing)
+  void _showSnackbar(String title, String message, {required bool isError}) {
+    // Skip snackbars in test mode to avoid navigation context issues
+    if (Get.testMode == true) {
+      Get.log('Skipping snackbar in test mode: $title - $message', isError: false);
+      return;
+    }
+    
+    Get.snackbar(
+      title,
+      message,
+      snackPosition: SnackPosition.TOP,
+      backgroundColor: isError 
+          ? Get.theme.colorScheme.error 
+          : Get.theme.colorScheme.primary,
+      colorText: isError 
+          ? Get.theme.colorScheme.onError 
+          : Get.theme.colorScheme.onPrimary,
+      duration: const Duration(seconds: 3),
+    );
+  }
 
   @override
   void onInit() {

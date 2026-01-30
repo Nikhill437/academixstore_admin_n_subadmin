@@ -6,6 +6,8 @@ import '../services/base_api_service.dart';
 import '../services/role_access_service.dart';
 import '../services/dashboard_api_service.dart';
 import '../services/api/books_api_service.dart';
+import '../services/api/question_papers_api_service.dart';
+import '../services/file_validation_service.dart';
 import '../modules/auth/controller/auth_controller.dart'; // Updated import path
 
 /// Initial bindings that are loaded when the app starts
@@ -35,6 +37,18 @@ class InitialBinding extends Bindings {
 
     // Books API service - manages book-related operations
     Get.put<BooksApiService>(BooksApiService(), permanent: true);
+
+    // Question Papers API service - manages question paper operations
+    Get.put<QuestionPapersApiService>(
+      QuestionPapersApiService(),
+      permanent: true,
+    );
+
+    // File Validation service - validates file uploads
+    Get.put<FileValidationService>(
+      FileValidationService(),
+      permanent: true,
+    );
 
     // === Core Controllers ===
     // Authentication controller - manages app-wide auth state
