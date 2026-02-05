@@ -160,9 +160,11 @@ class AuthController extends GetxController {
         
         final userRole = userData['role'];
         final userId = userData['id'];
+        final collegeId = userData['college_id']; // Get college_id from response
         
         Get.log('🆔 User ID: $userId', isError: false);
         Get.log('👔 Role: $userRole', isError: false);
+        Get.log('🏫 College ID: $collegeId', isError: false);
 
         // Validate role-based access
         if (collegeId?.isNotEmpty == true) {
@@ -193,6 +195,7 @@ class AuthController extends GetxController {
           token: token,
           userId: userId,
           userRole: userRole,
+          collegeId: collegeId, // Save college_id
         );
 
         Get.log('💾 Token save result: $saveSuccess', isError: false);
@@ -267,9 +270,10 @@ class AuthController extends GetxController {
       }
 
       // Delete all GetX controllers to clear cached data
+      // Note: Using Get.deleteAll() without force:true to preserve permanent services
       try {
-        Get.deleteAll(force: true);
-        Get.log('✅ All GetX controllers deleted', isError: false);
+        Get.deleteAll();
+        Get.log('✅ All non-permanent GetX controllers deleted', isError: false);
       } catch (e) {
         Get.log('⚠️ Error deleting controllers: $e', isError: false);
       }

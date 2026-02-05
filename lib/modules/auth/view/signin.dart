@@ -26,8 +26,9 @@ class _SignInScreenState extends State<SignInScreen>
   void initState() {
     super.initState();
 
-    // Get AuthController instance (should be registered via binding)
-    _authController = Get.find<AuthController>();
+    // Get or create AuthController instance
+    // Use Get.put to ensure it exists (will reuse if already exists)
+    _authController = Get.put(AuthController());
 
     _animationController = AnimationController(
       vsync: this,

@@ -4,6 +4,7 @@ import '../controller/students_controller.dart';
 import '../model/student.dart';
 import '../../../common_widgets/common_data_table.dart';
 import '../../../common_widgets/shared_sidebar.dart';
+import '../../auth/controller/auth_controller.dart';
 import 'add_edit_student_dialog.dart';
 
 /// Students table view displaying student management interface
@@ -13,6 +14,8 @@ class StudentsTableView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = Get.put(StudentsController());
+    final authController = Get.find<AuthController>();
+    
     return Scaffold(
       body: Row(
         children: [
@@ -38,6 +41,7 @@ class StudentsTableView extends StatelessWidget {
                   break;
               }
             },
+            onLogout: () => authController.logout(),
           ),
 
           // Main content area

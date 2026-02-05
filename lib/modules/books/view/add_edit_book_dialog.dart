@@ -5,6 +5,7 @@ import '../controller/books_controller.dart';
 import '../../../models/book.dart';
 import '../../colleges/controller/colleges_controller.dart';
 import '../../../services/file_validation_service.dart';
+import '../../../services/token_service.dart';
 
 class AddEditBookDialog extends StatefulWidget {
   final Book? book; // null for add, Book instance for edit
@@ -19,6 +20,7 @@ class _AddEditBookDialogState extends State<AddEditBookDialog> {
   final _formKey = GlobalKey<FormState>();
   final BooksController _booksController = Get.find<BooksController>();
   final CollegesController _collegesController = Get.find<CollegesController>();
+  final TokenService _tokenService = Get.find<TokenService>();
 
   // Form controllers
   late final TextEditingController _nameController;
@@ -104,6 +106,21 @@ class _AddEditBookDialogState extends State<AddEditBookDialog> {
     // Load colleges if not already loaded
     if (_collegesController.colleges.isEmpty) {
       _collegesController.loadColleges();
+    }
+    
+    // Auto-set college_id for college admins
+    _initializeCollegeForUser();
+  }
+  
+  Future<void> _initializeCollegeForUser() async {
+    final userRole = await _tokenService.getUserRole();
+    final collegeId = await _tokenService.getCollegeId();
+    
+    if (userRole == 'college_admin' && collegeId != null && !_isEditMode) {
+      setState(() {
+        _selectedCollegeId = collegeId;
+      });
+      Get.log('🏫 Auto-set college_id for college admin: $collegeId', isError: false);
     }
   }
 
@@ -874,66 +891,105 @@ class _AddEditBookDialogState extends State<AddEditBookDialog> {
   }
 
   Widget _buildCollegeDropdown() {
-    return Obx(() {
-      final colleges = _collegesController.colleges;
-      final isLoading = _collegesController.isLoading;
-
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'College (Optional)',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            value: _selectedCollegeId,
-            decoration: InputDecoration(
-              hintText: isLoading
-                  ? 'Loading colleges...'
-                  : 'Select college (optional)',
-              filled: true,
-              fillColor: Colors.grey.shade50,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.grey.shade300),
+    return FutureBuilder<String?>(
+      future: _tokenService.getUserRole(),
+      builder: (context, roleSnapshot) {
+        if (!roleSnapshot.hasData) {
+          return const CircularProgressIndicator();
+        }
+        
+        final userRole = roleSnapshot.data;
+        final isCollegeAdmin = userRole == 'college_admin';
+        
+        return Obx(() {
+          final colleges = _collegesController.colleges;
+          final isLoading = _collegesController.isLoading;
+          
+          // For college admins, show their college name (read-only)
+          if (isCollegeAdmin) {
+            // Wait for colleges to load
+            if (isLoading || colleges.isEmpty) {
+              return _buildTextField(
+                controller: TextEditingController(text: 'Loading colleges...'),
+                label: 'College',
+                hint: 'Loading...',
+                enabled: false,
+              );
+            }
+            
+            final selectedCollege = colleges.firstWhereOrNull(
+              (c) => c.id == _selectedCollegeId,
+            );
+            
+            return _buildTextField(
+              controller: TextEditingController(
+                text: selectedCollege?.name ?? 'College not found',
               ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.grey.shade300),
+              label: 'College',
+              hint: 'Your college',
+              enabled: false, // Read-only for college admins
+            );
+          }
+          
+          // For super admins, show dropdown
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'College (Optional)',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.indigo, width: 2),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: _selectedCollegeId,
+                decoration: InputDecoration(
+                  hintText: isLoading
+                      ? 'Loading colleges...'
+                      : 'Select college (optional)',
+                  filled: true,
+                  fillColor: Colors.grey.shade50,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.indigo, width: 2),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                ),
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('No College (System-wide)'),
+                  ),
+                  ...colleges.map((college) {
+                    return DropdownMenuItem<String>(
+                      value: college.id,
+                      child: Text(college.name),
+                    );
+                  }).toList(),
+                ],
+                onChanged: isLoading
+                    ? null
+                    : (value) {
+                        setState(() {
+                          _selectedCollegeId = value;
+                        });
+                      },
               ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 12,
-              ),
-            ),
-            items: [
-              const DropdownMenuItem<String>(
-                value: null,
-                child: Text('No College (System-wide)'),
-              ),
-              ...colleges.map((college) {
-                return DropdownMenuItem<String>(
-                  value: college.id,
-                  child: Text(college.name),
-                );
-              }).toList(),
             ],
-            onChanged: isLoading
-                ? null
-                : (value) {
-                    setState(() {
-                      _selectedCollegeId = value;
-                    });
-                  },
-          ),
-        ],
-      );
-    });
+          );
+        });
+      },
+    );
   }
   
   Widget _buildQuestionPapersSection() {

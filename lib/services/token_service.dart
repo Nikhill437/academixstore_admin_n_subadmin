@@ -6,6 +6,7 @@ class TokenService extends GetxService {
   static const String _tokenKey = 'jwt_token';
   static const String _userIdKey = 'user_id';
   static const String _userRoleKey = 'user_role';
+  static const String _collegeIdKey = 'college_id';
 
   SharedPreferences? _prefs;
 
@@ -35,12 +36,14 @@ class TokenService extends GetxService {
     required String token,
     String? userId,
     String? userRole,
+    String? collegeId,
   }) async {
     try {
       final prefs = await _getPrefs();
       await prefs.setString(_tokenKey, token);
       if (userId != null) await prefs.setString(_userIdKey, userId);
       if (userRole != null) await prefs.setString(_userRoleKey, userRole);
+      if (collegeId != null) await prefs.setString(_collegeIdKey, collegeId);
       Get.log('Token saved successfully', isError: false);
       return true;
     } catch (e) {
@@ -77,12 +80,22 @@ class TokenService extends GetxService {
     }
   }
 
+  Future<String?> getCollegeId() async {
+    try {
+      final prefs = await _getPrefs();
+      return prefs.getString(_collegeIdKey);
+    } catch (e) {
+      return null;
+    }
+  }
+
   Future<bool> deleteToken() async {
     try {
       final prefs = await _getPrefs();
       await prefs.remove(_tokenKey);
       await prefs.remove(_userIdKey);
       await prefs.remove(_userRoleKey);
+      await prefs.remove(_collegeIdKey);
       return true;
     } catch (e) {
       return false;

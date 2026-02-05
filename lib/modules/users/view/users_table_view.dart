@@ -4,6 +4,7 @@ import '../controller/users_controller.dart';
 import '../model/user.dart';
 import '../../../common_widgets/common_data_table.dart';
 import '../../../common_widgets/shared_sidebar.dart';
+import '../../auth/controller/auth_controller.dart';
 import 'add_edit_user_dialog.dart';
 
 /// Users table view displaying user management interface
@@ -14,6 +15,7 @@ class UsersTableView extends StatelessWidget {
   Widget build(BuildContext context) {
     // Initialize the controller if it's not already initialized
     final controller = Get.put(UsersController());
+    final authController = Get.find<AuthController>();
 
     return Scaffold(
       body: Row(
@@ -40,6 +42,7 @@ class UsersTableView extends StatelessWidget {
                   break;
               }
             },
+            onLogout: () => authController.logout(),
           ),
 
           // Main content area

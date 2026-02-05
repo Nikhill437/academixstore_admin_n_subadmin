@@ -4,6 +4,7 @@ import '../../../common_widgets/common_data_table.dart';
 import '../../../common_widgets/shared_sidebar.dart';
 import '../controller/books_controller.dart';
 import '../../../models/book.dart';
+import '../../auth/controller/auth_controller.dart';
 import 'add_edit_book_dialog.dart';
 
 /// Books table view displaying book inventory with role-based access control
@@ -13,6 +14,8 @@ class BooksTableView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final authController = Get.find<AuthController>();
+    
     return Scaffold(
       body: Row(
         children: [
@@ -39,6 +42,7 @@ class BooksTableView extends StatelessWidget {
                   break;
               }
             },
+            onLogout: () => authController.logout(),
           ),
 
           // Main content area

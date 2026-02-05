@@ -4,6 +4,7 @@ import '../controller/colleges_controller.dart';
 import '../model/college.dart';
 import '../../../common_widgets/common_data_table.dart';
 import '../../../common_widgets/shared_sidebar.dart';
+import '../../auth/controller/auth_controller.dart';
 import 'add_edit_college_dialog.dart';
 
 /// Colleges table view displaying college management interface
@@ -13,6 +14,7 @@ class CollegesTableView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = Get.put(CollegesController());
+    final authController = Get.find<AuthController>();
 
     return Scaffold(
       body: Row(
@@ -39,6 +41,7 @@ class CollegesTableView extends StatelessWidget {
                   break;
               }
             },
+            onLogout: () => authController.logout(),
           ),
 
           // Main content area

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../controller/students_controller.dart';
 import '../model/student.dart';
+import '../../../services/token_service.dart';
+import '../../colleges/controller/colleges_controller.dart';
 
 class AddEditStudentDialog extends StatefulWidget {
   final Student? student;
@@ -15,6 +17,8 @@ class AddEditStudentDialog extends StatefulWidget {
 class _AddEditStudentDialogState extends State<AddEditStudentDialog> {
   final _formKey = GlobalKey<FormState>();
   final StudentsController _controller = Get.find<StudentsController>();
+  final TokenService _tokenService = Get.find<TokenService>();
+  final CollegesController _collegesController = Get.find<CollegesController>();
 
   late final TextEditingController _fullNameController;
   late final TextEditingController _emailController;
@@ -25,6 +29,7 @@ class _AddEditStudentDialogState extends State<AddEditStudentDialog> {
   late final TextEditingController _yearController;
   bool _isLoading = false;
   bool _isEditMode = false;
+  bool _isPasswordVisible = false; // Add password visibility state
 
   @override
   void initState() {
@@ -46,6 +51,26 @@ class _AddEditStudentDialogState extends State<AddEditStudentDialog> {
       text: widget.student?.collegeId ?? '',
     );
     _yearController = TextEditingController(text: widget.student?.year ?? '');
+    
+    // Load colleges if not already loaded
+    if (_collegesController.colleges.isEmpty) {
+      _collegesController.loadColleges();
+    }
+    
+    // Auto-set college_id for college admins
+    _initializeCollegeForUser();
+  }
+  
+  Future<void> _initializeCollegeForUser() async {
+    final userRole = await _tokenService.getUserRole();
+    final collegeId = await _tokenService.getCollegeId();
+    
+    if (userRole == 'college_admin' && collegeId != null && !_isEditMode) {
+      setState(() {
+        _collegeIdController.text = collegeId;
+      });
+      Get.log('🏫 Auto-set college_id for college admin: $collegeId', isError: false);
+    }
   }
 
   @override
@@ -186,20 +211,7 @@ class _AddEditStudentDialogState extends State<AddEditStudentDialog> {
 
                       // Password (only for new students)
                       if (!_isEditMode)
-                        _buildTextField(
-                          controller: _passwordController,
-                          label: 'Password *',
-                          hint: 'Enter password',
-                          icon: Icons.lock,
-                          obscureText: true,
-                          validator: (value) {
-                            if (value?.isEmpty ?? true) return 'Required';
-                            if (value!.length < 6) {
-                              return 'Password must be at least 6 characters';
-                            }
-                            return null;
-                          },
-                        ),
+                        _buildPasswordField(),
                       if (!_isEditMode) const SizedBox(height: 16),
 
                       _buildTextField(
@@ -224,13 +236,59 @@ class _AddEditStudentDialogState extends State<AddEditStudentDialog> {
                           ),
                           const SizedBox(width: 16),
                           Expanded(
-                            child: _buildTextField(
-                              controller: _collegeIdController,
-                              label: 'College ID *',
-                              hint: 'Enter college UUID',
-                              icon: Icons.school,
-                              validator: (value) =>
-                                  value?.isEmpty ?? true ? 'Required' : null,
+                            child: FutureBuilder<String?>(
+                              future: _tokenService.getUserRole(),
+                              builder: (context, roleSnapshot) {
+                                if (!roleSnapshot.hasData) {
+                                  return const CircularProgressIndicator();
+                                }
+                                
+                                final userRole = roleSnapshot.data;
+                                final isCollegeAdmin = userRole == 'college_admin';
+                                
+                                // For college admins, show college name (read-only)
+                                if (isCollegeAdmin) {
+                                  return Obx(() {
+                                    final colleges = _collegesController.colleges;
+                                    final isLoading = _collegesController.isLoading;
+                                    
+                                    // Wait for colleges to load
+                                    if (isLoading || colleges.isEmpty) {
+                                      return _buildTextField(
+                                        controller: TextEditingController(text: 'Loading colleges...'),
+                                        label: 'College',
+                                        hint: 'Loading...',
+                                        icon: Icons.school,
+                                        enabled: false,
+                                      );
+                                    }
+                                    
+                                    final selectedCollege = colleges.firstWhereOrNull(
+                                      (c) => c.id == _collegeIdController.text,
+                                    );
+                                    
+                                    return _buildTextField(
+                                      controller: TextEditingController(
+                                        text: selectedCollege?.name ?? 'College not found',
+                                      ),
+                                      label: 'College',
+                                      hint: 'Your college',
+                                      icon: Icons.school,
+                                      enabled: false, // Read-only for college admins
+                                    );
+                                  });
+                                }
+                                
+                                // For super admins, show editable field
+                                return _buildTextField(
+                                  controller: _collegeIdController,
+                                  label: 'College ID *',
+                                  hint: 'Enter college UUID',
+                                  icon: Icons.school,
+                                  validator: (value) =>
+                                      value?.isEmpty ?? true ? 'Required' : null,
+                                );
+                              },
                             ),
                           ),
                         ],
@@ -310,6 +368,62 @@ class _AddEditStudentDialogState extends State<AddEditStudentDialog> {
     );
   }
 
+  Widget _buildPasswordField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Password *',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _passwordController,
+          obscureText: !_isPasswordVisible,
+          validator: (value) {
+            if (value?.isEmpty ?? true) return 'Required';
+            if (value!.length < 6) {
+              return 'Password must be at least 6 characters';
+            }
+            return null;
+          },
+          decoration: InputDecoration(
+            hintText: 'Enter password',
+            prefixIcon: const Icon(Icons.lock),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+              ),
+              onPressed: () {
+                setState(() {
+                  _isPasswordVisible = !_isPasswordVisible;
+                });
+              },
+            ),
+            filled: true,
+            fillColor: Colors.grey.shade50,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.indigo, width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 12,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -318,6 +432,7 @@ class _AddEditStudentDialogState extends State<AddEditStudentDialog> {
     String? Function(String?)? validator,
     TextInputType? keyboardType,
     bool obscureText = false,
+    bool enabled = true,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -332,16 +447,21 @@ class _AddEditStudentDialogState extends State<AddEditStudentDialog> {
           validator: validator,
           keyboardType: keyboardType,
           obscureText: obscureText,
+          enabled: enabled,
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: Icon(icon),
             filled: true,
-            fillColor: Colors.grey.shade50,
+            fillColor: enabled ? Colors.grey.shade50 : Colors.grey.shade200,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(color: Colors.grey.shade300),
             ),
             enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            disabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(color: Colors.grey.shade300),
             ),
